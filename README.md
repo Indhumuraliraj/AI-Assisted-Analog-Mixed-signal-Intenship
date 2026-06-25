@@ -278,7 +278,7 @@ AMUX2_3V macro already placed via macro.cfg. State input
 
 
 ### Output
-![image]()
+![image](https://github.com/Indhumuraliraj/AI-Assisted-Analog-Mixed-signal-Intenship/blob/main/outputs/floorplane.jpeg)
 
 ### Verification
 
@@ -309,7 +309,7 @@ obstruction. State input (results/floorplan/design_mux.def) and output
 
 
 ### Output
-![image]()
+![image](https://github.com/Indhumuraliraj/AI-Assisted-Analog-Mixed-signal-Intenship/blob/main/outputs/placement.jpeg)
 
 ### Verification
 
@@ -389,7 +389,7 @@ input (results/pdn/design_mux.def) and output
 ```
 
 ### Output
-![image]()
+![image](https://github.com/Indhumuraliraj/AI-Assisted-Analog-Mixed-signal-Intenship/blob/main/outputs/routing.jpeg)
 
 ## Verification
 
@@ -537,7 +537,7 @@ results/final/lef/design_mux.lef).
 ```
 
 ### output
-![image]()
+![image](https://github.com/Indhumuraliraj/AI-Assisted-Analog-Mixed-signal-Intenship/blob/main/outputs/layout.jpeg)
 
 ## Learning
 
