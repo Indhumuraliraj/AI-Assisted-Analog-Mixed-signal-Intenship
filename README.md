@@ -42,20 +42,15 @@ Therefore, the analog macro must be converted into abstract representations that
 | Verilog Blackbox | Logical representation  |
 | SPICE            | LVS verification        |
 
-## Key Learning
-
-Before this project, I thought GDS alone was sufficient.
-
-After studying the repository using AI prompts, I learned that OpenLane primarily uses LEF and LIB during implementation, while GDS is merged only at the final stage.
 
 ---
 
 # 🧠 Prompt 1 – Repository Understanding
 
-## Objective
+### Objective
 Understand the complete mixed-signal flow implemented in the reference repository.
 
-## Prompt
+### Prompt
 ```
 Analyze the GitHub repository and explain:
 
@@ -67,7 +62,7 @@ Analyze the GitHub repository and explain:
 6. Expected outputs generated at each stage
 ```
 
-## AI Outcome
+### AI Outcome
 
 Generated explanation of:
 
@@ -88,7 +83,7 @@ Verification
 Before running OpenLane, I wanted to understand why each file exists, where it is used in the flow, and what would happen if the file was missing.
 Instead of directly using the files from the reference repository, I first used AI to analyze the mixed-signal design requirements.
 
-## Prompt 
+### Prompt 
 ```
 For a mixed-signal RTL-to-GDS flow using OpenLane and SKY130, identify all required input files for integrating an analog hard macro (AMUX2_3V).
 
@@ -100,7 +95,7 @@ For each file explain:
 4. Whether it is used for logical, physical, timing, or verification purposes
 ```
 
-## AI Understanding
+### AI Understanding
 
 The AI identified the following files as mandatory for successful mixed-signal integration:
 
@@ -114,11 +109,11 @@ The AI identified the following files as mandatory for successful mixed-signal i
 | config.tcl | OpenLane setup |
 | macro.cfg | Macro placement |
 
-## Verification Against Repository
+### Verification Against Repository
 
 The AI-generated list was compared with the actual files available in the reference repository.
 
-## Result
+### Result
 
  All major files required for synthesis, floorplanning, placement, routing, timing analysis, and final GDS generation were correctly identified.
 
@@ -139,7 +134,17 @@ This allows OpenLane to treat the analog block as a fixed hard macro.
 
 # 🤖 Phase 3 – AI Generated Files
 
-The following files were generated or validated using AI prompts.
+### Prompt 
+```
+Generate all input files required for the complete Physical Design flow of a mixed-signal VLSI design using OpenLane and SKY130.
+
+The design consists of:
+- A digital top module
+- An analog hard macro
+
+```
+
+The following files were generated using AI prompts.
 
 ### Generated Files
 design_mux.v
@@ -155,7 +160,7 @@ macro.cfg
 
 
 
-# ⚠️ First AI Mistake Discovered
+## ⚠️ First AI Mistake Discovered
 
 AI initially generated:
 
@@ -205,41 +210,28 @@ Never trust AI-generated interfaces without verification.
 
 ---
 
+
+
+##  Comparison: Actual Input Files vs. AI-Generated Input Files
+
+Once each file was AI-generated, it was checked line-by-line against the real file in the reference repository before being trusted in the flow. The table below summarizes what matched, what didn't, and what was never fully cross-checked.
+
+| File | AI-Generated (First Attempt) | Actual (Reference Repo) | Match? | Notes |
+|---|---|---|---|---|
+| `AMUX2_3V.v` (blackbox) | Ports: `Vin1, Vin2, sel, sel_b, Vout` | Ports: `I0, I1, out, select` | ❌ **Mismatch** | AI invented plausible-sounding port names instead of using the macro's real interface. Caught only by manual diff against the repo — see [First AI Mistake Discovered](#-first-ai-mistake-discovered) below. Fixed by re-prompting with an exact, locked port list. |
+| `design_mux.v` (top-level) | Instantiates `AMUX2_3V` using the *incorrect* port names above | Instantiates `AMUX2_3V` using `I0, I1, out, select`; also depends on `raven_spi.v` / `spi_slave.v` | ❌ **Mismatch + missing dependency** | Inherited the port mismatch from the blackbox above. Additionally, the AI-generated version omitted the SPI dependency present in the real repo — flagged as an open follow-up, not yet resolved. |
+| `AMUX2_3V.lef` | Generated from a Magic Tcl script using the *corrected* port list | Pin names, footprint, and LEFclass/LEFsite properties match the macro's physical layout | ✅ Match (after fix) | Once the corrected port list was used as input to the LEF-generation script, geometry and pin names lined up with the reference LEF. No independent discrepancy found in this file itself. |
+| `AMUX2_3V.lib` | Generated via `verilog_to_lib.pl` from the corrected blackbox | Reference LIB's timing arcs and pin list | ✅ Match (after fix) | Timing model correctness depends entirely on the blackbox port list being correct — this was not independently re-verified beyond pin-name consistency. |
+| `config.tcl` | AI-generated variable set (PDK, cell library, clock period, die area, EXTRA_LEFS/EXTRA_LIBS paths) | Reference repo's `config.tcl` | ⚠️ **Not fully verified** | Structurally plausible and the flow ran with it, but individual values (e.g. exact `DIE_AREA`, `CLOCK_PERIOD`) were not diffed line-by-line against the reference file in this writeup. |
+| `macro.cfg` | AI-generated fixed coordinate + orientation `N` inside a 200×200 µm die | Reference repo's macro placement coordinate | ⚠️ **Not fully verified** | The AI-generated placement worked (macro landed inside the die boundary, away from the IO ring), but the exact coordinates were not confirmed to be identical to the reference repo's — only functionally equivalent. |
+---
+
 # 🚀 Physical Design Journey
 
 ## 🎯 Objective
 
 To implement and study the complete RTL-to-GDSII Physical Design flow using OpenLane and SKY130, including synthesis, floorplanning, placement, CTS, PDN generation, routing, DRC/LVS verification, and final GDSII generation, while exploring AI-assisted methodologies for design understanding, debugging, and verification.
 
-🤖 AI Prompt Used
-```
-Act as a VLSI physical design engineer using OpenLane on SKY130. I have a 
-mixed-signal design "design_mux" with a digital top module and one analog 
-hard macro "AMUX2_3V" (LEF/LIB/Verilog blackbox already prepared, paths in 
-config.tcl). Walk me through the full RTL-to-GDS flow as a single ordered 
-list of OpenLane interactive Tcl commands, in this exact order, with one 
-line of comment above each explaining what file it consumes and what file 
-it produces:
-
-1. prep + add macro LEFs
-2. synthesis
-3. floorplanning
-4. IO placement
-5. global + detailed placement
-6. tap/decap insertion
-7. clock tree synthesis (CTS)
-8. power delivery network (PDN) generation
-9. routing
-10. parasitics extraction (SPEF)
-11. Magic DRC
-12. LVS (Netgen)
-13. final GDSII + LEF/MAG generation
-
-For each stage, also tell me the exact result file name to check 
-(e.g. results/<stage>/design_mux.def) and the one most common failure mode 
-for a mixed-signal design with a fixed macro at that stage.
-```
----
 
 ## Stage 1 – Synthesis
 
@@ -247,10 +239,12 @@ for a mixed-signal design with a fixed macro at that stage.
 
 Convert RTL into gate-level logic.
 
-### Command
+### prompt
 
 ```tcl
-run_synthesis
+Write the OpenLane Tcl command to run synthesis for design_mux. State the
+input (design_mux.v + AMUX2_3V.v blackbox) and output file
+(results/synthesis/design_mux.v).
 ```
 
 ### Verification
@@ -273,14 +267,17 @@ Allocate physical space for:
 * Routing resources
 * Analog macro
 
-### Command
+### prompt
 
 ```tcl
-init_floorplan
+Write the OpenLane Tcl command to run floorplanning for design_mux with the
+AMUX2_3V macro already placed via macro.cfg. State input
+(results/synthesis/design_mux.v + macro.cfg) and output
+(results/floorplan/design_mux.def).
 ```
 
 
-## Output
+### Output
 ![image]()
 
 ### Verification
@@ -301,14 +298,17 @@ The router must route around it.
 
 Place standard cells around the analog macro.
 
-### Command
+### prompt
 
 ```tcl
-run_placement
+Write the OpenLane Tcl commands to run global placement followed by
+detailed placement for design_mux, with AMUX2_3V treated as a fixed
+obstruction. State input (results/floorplan/design_mux.def) and output
+(results/placement/design_mux.def).
 ```
 
 
-## Output
+### Output
 ![image]()
 
 ### Verification
@@ -330,11 +330,17 @@ Connect all cells and macros to:
 * VDD
 * GND
 
-### Command
+### prompt
 
 ```tcl
-gen_pdn
+Write the OpenLane Tcl command to generate the PDN for design_mux,
+ensuring the AMUX2_3V macro's VDD/VSS pins are stitched into the power
+straps. State input (results/cts/design_mux.def + AMUX2_3V.lef power pins)
+and output (results/floorplan/design_mux.def with PDN, or
+results/pdn/design_mux.def). 
+
 ```
+
 
 ### Learning
 
@@ -351,10 +357,12 @@ Clock Tree Synthesis is performed to distribute the clock signal uniformly throu
 an clock skew be minimized?
 
 
-## Command
+### prompt
 
 ```tcl
-run_cts
+Write the OpenLane Tcl command to run CTS for design_mux. State input
+(results/placement/design_mux.def) and output (results/cts/design_mux.def).
+
 ```
 
 ## Learning
@@ -370,13 +378,17 @@ A poorly synthesized clock tree can cause setup and hold violations even when ro
 Connect all signal nets physically using available routing resources.
 
 
-## Command
+### prompt
 
 ```tcl
-run_routing
+Write the OpenLane Tcl command to run global and detailed routing for
+design_mux, routing signal nets around the fixed AMUX2_3V macro. State
+input (results/pdn/design_mux.def) and output
+(results/routing/design_mux.def).
+
 ```
 
-## Output
+### Output
 ![image]()
 
 ## Verification
@@ -387,26 +399,37 @@ run_routing
 
 ---
 
-# 🏁 Stage 8 – GDSII Generation
+
+
+# 🔍 Stage 9 – signoff
 
 ## Purpose
 
-Generate the final manufacturable layout database.
+## DRC 
 
-The GDSII file is the final output delivered for fabrication.
+### prompt
 
-## Learning
+```tcl
+Write the exact Magic Tcl commands to load the final routed GDS/DEF for
+design_mux and run DRC, including loading AMUX2_3V.gds as a subcell. State
+input (results/routing/design_mux.def + AMUX2_3V.gds) and output
+(reports/drc/design_mux.drc).
 
-The LEF file is used during implementation, but the GDS file becomes critical during final layout generation and signoff.
+```
 
----
 
-# 🔍 Stage 9 – Final Layout Verification
+## LVS 
 
-## Purpose
+### prompt
 
-Verify that the generated layout is physically and logically correct.
+```tcl
+Write the exact Netgen command and setup file needed to run LVS comparing
+the extracted SPICE netlist of design_mux against the schematic netlist,
+treating AMUX2_3V as a black-box macro using its SPICE model. State input
+(extracted netlist + AMUX2_3V.spice + schematic netlist) and output
+(reports/lvs/design_mux.lvs.log).
 
+```
 
 # ❌ Errors Encountered During Implementation
 
@@ -495,28 +518,38 @@ Performed using:
 ✅ Final layout comparable to reference repository
 
 
+# 🏁 Stage 8 – GDSII Generation
+
+## Purpose
+
+Generate the final manufacturable layout database.
+
+The GDSII file is the final output delivered for fabrication.
+
+### prompt
+
+```tcl
+Write the OpenLane Tcl command to run the final GDSII streamout for
+design_mux, merging AMUX2_3V.gds into the top-level layout, and generate
+the final LEF/MAG views. State input (results/routing/design_mux.def +
+AMUX2_3V.gds) and output (results/final/gds/design_mux.gds +
+results/final/lef/design_mux.lef).
+```
+
+### output
+![image]()
+
+## Learning
+
+The LEF file is used during implementation, but the GDS file becomes critical during final layout generation and signoff.
+
+
+
 The AI-assisted flow successfully reproduced the mixed-signal RTL-to-GDS methodology demonstrated in the reference repository while documenting the complete prompt-driven design and verification journey.
 
 ---
 
-# 🎉 Final Success
 
-## Final DRC Result
-
-```text
-DRC = 0
-```
-![image]()
-
-### What This Means
-
-✅ No design rule violations
-
-✅ Layout accepted by Magic
-
-✅ Closest match to reference repository
-
----
 
 # 📊 Comparison with Reference Repository
 
