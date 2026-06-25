@@ -153,34 +153,37 @@ add ports to the macro instance. Add minimal digital control logic driving
 ### 1.1.  `design_mux.v` — Top-Level Digital Module
 
 ```verilog
-module design_mux (
-    input  wire clk,
-    input  wire rst_n,
-    input  wire I0,
-    input  wire I1,
-    output wire out
+AMUX2_3V AMUX2_3V (
+    //.VDD (VDD),
+    //.VSS (VSS),
+    .I0     (I0),
+    .I1     (I1),
+    .out    (out),
+    .select (select)
 );
 
-    // Minimal digital control logic driving "select" from clk/rst_n
-    reg select;
-
-    always @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
-            select <= 1'b0;
-        else
-            select <= ~select;   // toggles which input is muxed each cycle
-    end
-
-    // Instantiation of the analog hard macro — port names locked to
-    // match AMUX2_3V exactly: I0, I1, out, select
-    AMUX2_3V u_amux2_3v (
-        .I0     (I0),
-        .I1     (I1),
-        .out    (out),
-        .select (select)
-    );
-
-endmodule
+raven_spi raven_spi (
+    .RST          (RST),
+    .SCK          (SCK),
+    .SDI          (SDI),
+    .CSB          (CSB),
+    .SDO          (I0),
+    .sdo_enb      (sdo_enb),
+    .xtal_ena     (xtal_ena),
+    .reg_ena      (reg_ena),
+    .pll_vco_ena  (pll_vco_ena),
+    .pll_cp_ena   (pll_cp_ena),
+    .pll_bias_ena (pll_bias_ena),
+    .pll_trim     (pll_trim),
+    .pll_bypass   (pll_bypass),
+    .irq          (irq),
+    .reset        (I1),
+    .trap         (trap),
+    .mfgr_id      (mfgr_id),
+    .prod_id      (prod_id),
+    .mask_rev_in  (mask_rev_in),
+    .mask_rev     (mask_rev)
+);
 ```
 
 ### 2. Macro Blackbox Stub (`AMUX2_3V.v`)
@@ -195,13 +198,26 @@ pins.
 ### 2.1. `AMUX2_3V.v` — Macro Blackbox Stub
 
 ```verilog
-(* blackbox *)
 module AMUX2_3V (
     input  I0,
     input  I1,
     output out,
     input  select
 );
+
+    wire VDD, VSS;
+    wire I0, I1;
+    wire out;
+    wire select;
+    wire NaN;
+
+    initial begin
+        NaN = 0.0 / 0.0;
+    end
+
+    assign out = (select == 1'b1) ? I1 :
+                 (select == 1'b0) ? I0 : NaN;
+
 endmodule
 ```
 
