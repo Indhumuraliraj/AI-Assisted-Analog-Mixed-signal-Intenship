@@ -132,32 +132,266 @@ This allows OpenLane to treat the analog block as a fixed hard macro.
 
 ---
 
-# 🤖 Phase 3 – AI Generated Files
 
-### Prompt 
+# 🤖 Phase 3 — AI-Generated Files
+
+
+## 🛠️ Prompts Used to Generate Each Required Input File
+
+Each input file was generated using a **low-token, tightly-scoped prompt** that locks down exact port lists and net names wherever a mismatch could break the hierarchy. This is deliberate — port/pin mismatches are the single most common failure mode encountered in this project (see the macro port mismatch caught below). 
+
+### 1. Top-Level Digital Verilog (`design_mux.v`)
+
 ```
-Generate all input files required for the complete Physical Design flow of a mixed-signal VLSI design using OpenLane and SKY130.
-
-The design consists of:
-- A digital top module
-- An analog hard macro
-
+Write a top-level Verilog module "design_mux" for OpenLane synthesis.
+It instantiates one analog hard macro "AMUX2_3V" with EXACTLY these ports:
+input I0, input I1, output out, input select. Do not rename, reorder, or
+add ports to the macro instance. Add minimal digital control logic driving
+"select" from a clock and reset. No power/ground pins in this file.
 ```
 
-The following files were generated using AI prompts.
+### 1.1.  `design_mux.v` — Top-Level Digital Module
 
-### Generated Files
-design_mux.v
-AMUX2_3V.v 
-AMUX2_3V.lef
-AMUX2_3V.lib 
-AMUX2_3V.gds 
-config.tcl 
-macro.cfg
+```verilog
+module design_mux (
+    input  wire clk,
+    input  wire rst_n,
+    input  wire I0,
+    input  wire I1,
+    output wire out
+);
+
+    // Minimal digital control logic driving "select" from clk/rst_n
+    reg select;
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            select <= 1'b0;
+        else
+            select <= ~select;   // toggles which input is muxed each cycle
+    end
+
+    // Instantiation of the analog hard macro — port names locked to
+    // match AMUX2_3V exactly: I0, I1, out, select
+    AMUX2_3V u_amux2_3v (
+        .I0     (I0),
+        .I1     (I1),
+        .out    (out),
+        .select (select)
+    );
+
+endmodule
+```
+
+### 2. Macro Blackbox Stub (`AMUX2_3V.v`)
+
+```
+Write a Verilog blackbox module declaration for AMUX2_3V with EXACTLY this
+port list, do not infer or add pins: input I0, input I1, output out,
+input select. Use (* blackbox *) attribute, no internal logic, no power
+pins.
+```
+
+### 2.1. `AMUX2_3V.v` — Macro Blackbox Stub
+
+```verilog
+(* blackbox *)
+module AMUX2_3V (
+    input  I0,
+    input  I1,
+    output out,
+    input  select
+);
+endmodule
+```
 
 
----
+### 3. Macro LEF — Generated via Magic, Not Text-Generated Directly
 
+```
+Write a Magic tcl script that opens AMUX2_3V.mag, converts labels to ports
+(VDD/VSS = inout/power+ground, I0/I1/select = input/signal, out =
+output/signal), sets property LEFclass CORE, sets property LEFsite
+unithddbl, moves origin to (0,0), and writes the LEF file.
+```
+
+### 3.1. `AMUX2_3V.lef` — Macro Physical Abstract View
+
+```lef
+MACRO AMUX2_3V
+  CLASS CORE ;
+  SITE unithddbl ;
+  ORIGIN 0.000 0.000 ;
+  FOREIGN AMUX2_3V 0.000 0.000 ;
+  SIZE 20.000 BY 15.000 ;
+  SYMMETRY X Y ;
+
+  PIN I0
+    DIRECTION INPUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER met1 ;
+        RECT 1.000 6.500 1.500 7.500 ;
+    END
+  END I0
+
+  PIN I1
+    DIRECTION INPUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER met1 ;
+        RECT 1.000 4.000 1.500 5.000 ;
+    END
+  END I1
+
+  PIN select
+    DIRECTION INPUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER met1 ;
+        RECT 1.000 9.000 1.500 10.000 ;
+    END
+  END select
+
+  PIN out
+    DIRECTION OUTPUT ;
+    USE SIGNAL ;
+    PORT
+      LAYER met1 ;
+        RECT 18.500 6.500 19.000 7.500 ;
+    END
+  END out
+
+  PIN VDD
+    DIRECTION INOUT ;
+    USE POWER ;
+    PORT
+      LAYER met1 ;
+        RECT 0.000 13.500 20.000 14.500 ;
+    END
+  END VDD
+
+  PIN VSS
+    DIRECTION INOUT ;
+    USE GROUND ;
+    PORT
+      LAYER met1 ;
+        RECT 0.000 0.500 20.000 1.500 ;
+    END
+  END VSS
+
+  OBS
+    LAYER met1 ;
+      RECT 0.000 0.000 20.000 15.000 ;
+  END
+END AMUX2_3V
+```
+
+### 4. Macro LIB (Timing/Functional Abstraction)
+
+```
+Write the exact shell command to run verilog_to_lib.pl on AMUX2_3V.v to
+generate AMUX2_3V.lib. List what fields (area, pins, timing arcs) the
+output should contain so I can manually verify it.
+```
+
+### 4.1. `AMUX2_3V.lib` — Macro Timing Abstraction
+
+```liberty
+library(AMUX2_3V) {
+  delay_model : table_lookup ;
+  time_unit : "1ns" ;
+  voltage_unit : "1V" ;
+  current_unit : "1mA" ;
+  capacitive_load_unit (1, pf) ;
+
+  cell(AMUX2_3V) {
+    area : 300 ;   /* 20 x 15 footprint, matches LEF SIZE */
+
+    pin(I0)     { direction : input ;  capacitance : 0.002 ; }
+    pin(I1)     { direction : input ;  capacitance : 0.002 ; }
+    pin(select) { direction : input ;  capacitance : 0.001 ; }
+
+    pin(out) {
+      direction : output ;
+      function : "(select * I1) + (!select * I0)" ;
+      timing() {
+        related_pin : "I0 I1 select" ;
+        timing_type : combinational ;
+        cell_rise(scalar) { values("0.150") ; }
+        cell_fall(scalar) { values("0.150") ; }
+      }
+    }
+  }
+}
+```
+
+### 5. `config.tcl`
+
+```
+Generate OpenLane config.tcl for design "design_mux": top verilog
+design_mux.v, blackbox AMUX2_3V.v, macro LEF/LIB via EXTRA_LEFS/EXTRA_LIBS,
+sky130A PDK, fd_sc_hd cells, CLOCK_PERIOD 10.0, DIE_AREA sized to fit one
+small macro plus a handful of std cells. Comment every variable.
+```
+
+
+### 5.1. `config.tcl` — OpenLane Run Configuration
+
+```tcl
+# Design identity
+set ::env(DESIGN_NAME) "design_mux"
+
+# RTL sources: top-level digital module only.
+# The analog macro is NOT included here — it is supplied as a
+# pre-built LEF/LIB/GDS via EXTRA_LEFS/EXTRA_LIBS/EXTRA_GDS_FILES below.
+set ::env(VERILOG_FILES) "$::env(DESIGN_DIR)/src/design_mux.v"
+
+# PDK / standard cell library
+set ::env(PDK) "sky130A"
+set ::env(STD_CELL_LIBRARY) "sky130_fd_sc_hd"
+
+# Clock
+set ::env(CLOCK_PORT) "clk"
+set ::env(CLOCK_PERIOD) "10.0"
+
+# Die area sized to fit one small macro (20x15 um) plus a handful
+# of std cells, with margin for routing and the macro keepout halo.
+set ::env(DIE_AREA) "0 0 200 200"
+set ::env(FP_SIZING) "absolute"
+
+# Analog macro abstract views — consumed during floorplanning,
+# placement, STA, and final GDS merge respectively.
+set ::env(EXTRA_LEFS) "$::env(DESIGN_DIR)/macro/AMUX2_3V.lef"
+set ::env(EXTRA_LIBS) "$::env(DESIGN_DIR)/macro/AMUX2_3V.lib"
+set ::env(EXTRA_GDS_FILES) "$::env(DESIGN_DIR)/macro/AMUX2_3V.gds"
+
+# Macro placement (fixed coordinates) — see macro.cfg
+set ::env(MACRO_PLACEMENT_CFG) "$::env(DESIGN_DIR)/macro.cfg"
+
+# Placement / routing margins to respect the macro's keepout halo
+set ::env(FP_PDN_VPITCH) "153.6"
+set ::env(FP_PDN_HPITCH) "153.18"
+set ::env(GLB_RT_MAXLAYER) "5"
+```
+
+
+### 6. `macro.cfg` (Placement Coordinates)
+
+```
+Write an OpenLane macro.cfg placing instance "AMUX2_3V" (or the actual
+instance name from design_mux.v) at a fixed coordinate inside a 200x200um
+die, away from the IO ring, orientation N. One line, correct format.
+```
+
+### 6.1. `macro.cfg` — Macro Placement Coordinates
+
+```
+AMUX2_3V 90.0 90.0 N
+```
+
+
+> ⚠️ **Reminder:** every file above is shown in its *corrected*, post-verification form. Treat the placeholder numeric values (LEF geometry, LIB timing arcs, PDN pitch) as structurally illustrative — they were not independently re-verified against a real `AMUX2_3V.mag` layout or characterized SPICE deck in this writeup, and should be replaced with actual extracted/characterized values before this flow is used for anything beyond a learning exercise.
 
 
 ## ⚠️ First AI Mistake Discovered
